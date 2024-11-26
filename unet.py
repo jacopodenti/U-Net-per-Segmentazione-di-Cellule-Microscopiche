@@ -56,7 +56,7 @@ def unet_model(input_size=(256, 256, 1)):
 
 # Caricamento dei dataset
 train_dataset = image_dataset_from_directory(
-    'path_to_train_directory', #cartella training
+    '/Users/nickucce/Downloads/Training-labeled', #cartella training
     labels='inferred',
     label_mode='int',
     color_mode='grayscale',
@@ -66,7 +66,7 @@ train_dataset = image_dataset_from_directory(
 )
 
 val_dataset = image_dataset_from_directory(
-    'path_to_val_directory', #cartella validazione
+    '/Users/nickucce/Downloads/Tuning', #cartella validazione
     labels='inferred',
     label_mode='int',
     color_mode='grayscale',
@@ -93,7 +93,7 @@ def save_predictions(dataset, model, output_dir):
             img.save(f"{output_dir}/prediction_{i}.png")
 
 # Salva le predizioni del set di validazione
-save_predictions(val_dataset, model, 'path_to_output_directory')
+save_predictions(val_dataset, model, '/Users/nickucce/Downloads/Output')
 
 # Visualizzazione del modello
 model.summary()
