@@ -5,10 +5,17 @@ from tensorflow.keras.preprocessing.image import array_to_img
 import os
 from dotenv import load_dotenv
 
-def unet_model(input_size=(256, 256, 1)):
-    load_dotenv()
-    inputs = layers.Input(input_size)
+# Carica le variabili d'ambiente dal file .env
+load_dotenv()
 
+# Ora puoi usare le variabili d'ambiente nel tuo codice
+TRAINING = os.getenv('PERCORSO_TRAINING_LABELED')
+TUNING = os.getenv('PERCORSO_TUNING')
+TESTING = os.getenv('PERCORSO_TESTING')
+OUTPUT = os.getenv('PERCORSO_OUTPUT')
+
+def unet_model(input_size=(256, 256, 1)):
+    inputs = layers.Input(input_size)
     # Encoder
     c1 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(inputs)
     c1 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(c1)
@@ -56,7 +63,6 @@ def unet_model(input_size=(256, 256, 1)):
     model = models.Model(inputs=[inputs], outputs=[outputs])
     return model
 
-TRAINING = os.getenv('PERCORSO_TRAINING_LABELED')
 train_dataset = image_dataset_from_directory(
     TRAINING,
     labels='inferred',
@@ -67,7 +73,6 @@ train_dataset = image_dataset_from_directory(
     shuffle=True
 )
 
-TUNING = os.getenv('PERCORSO_TUNING')
 val_dataset = image_dataset_from_directory(
     TUNING,
     labels='inferred',
@@ -77,8 +82,6 @@ val_dataset = image_dataset_from_directory(
     image_size=(256, 256),
     shuffle=True
 )
-
-# Funzione per preprocessare le etichette
 def preprocess_labels(dataset):
     def process(image, label):
         label = tf.expand_dims(label, axis=-1)
@@ -107,7 +110,6 @@ def save_predictions(dataset, model, output_dir):
             img.save(f"{output_dir}/prediction_{i}.png")
 
 # Salva le predizioni del set di validazione
-OUTPUT = os.getenv('PERCORSO_OUTPUT')
 save_predictions(val_dataset, model, OUTPUT)
 
 # Visualizzazione del modello
