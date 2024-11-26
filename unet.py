@@ -3,8 +3,10 @@ from tensorflow.keras import layers, models
 from tensorflow.keras.preprocessing import image_dataset_from_directory
 from tensorflow.keras.preprocessing.image import array_to_img
 import os
+from dotenv import load_dotenv
 
 def unet_model(input_size=(256, 256, 1)):
+    load_dotenv()
     inputs = layers.Input(input_size)
 
     # Encoder
@@ -54,9 +56,9 @@ def unet_model(input_size=(256, 256, 1)):
     model = models.Model(inputs=[inputs], outputs=[outputs])
     return model
 
-# Caricamento dei dataset
+TRAINING = os.getenv('PERCORSO_TRAINING_LABELED')
 train_dataset = image_dataset_from_directory(
-    'path_to_train_directory', #cartella training
+    TRAINING,
     labels='inferred',
     label_mode='int',
     color_mode='grayscale',
@@ -65,8 +67,9 @@ train_dataset = image_dataset_from_directory(
     shuffle=True
 )
 
+TUNING = os.getenv('PERCORSO_TUNING')
 val_dataset = image_dataset_from_directory(
-    'path_to_val_directory', #cartella validazione
+    TUNING,
     labels='inferred',
     label_mode='int',
     color_mode='grayscale',
@@ -104,7 +107,8 @@ def save_predictions(dataset, model, output_dir):
             img.save(f"{output_dir}/prediction_{i}.png")
 
 # Salva le predizioni del set di validazione
-save_predictions(val_dataset, model, 'path_to_output_directory')
+OUTPUT = os.getenv('PERCORSO_OUTPUT')
+save_predictions(val_dataset, model, OUTPUT)
 
 # Visualizzazione del modello
 model.summary()
