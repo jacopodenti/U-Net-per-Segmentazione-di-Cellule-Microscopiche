@@ -1,7 +1,20 @@
 import tensorflow as tf
 from tensorflow.keras import layers, models
-from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from PIL import Image
+from tensorflow.keras.preprocessing.image import ImageDataGenerator, load_img
+from functools import partial  # Importa partial
 import os
+from dotenv import load_dotenv
+import numpy as np
+
+# Carica le variabili d'ambiente dal file .env
+load_dotenv()
+
+# Ora puoi usare le variabili d'ambiente nel tuo codice
+TRAINING = os.getenv('PERCORSO_TRAINING_LABELED')
+TUNING = os.getenv('PERCORSO_TUNING')
+TESTING = os.getenv('PERCORSO_TESTING')
+OUTPUT = os.getenv('PERCORSO_OUTPUT')
 
 # 1. Definire la CNN
 def crea_modelo():
@@ -32,13 +45,47 @@ def crea_modelo():
 
     return modello
 
-# 2. Preparazione dei dati (Immagini e etichette)
-train_dir = 'path_to_train_data'  # Sostituisci con il percorso della tua cartella di training
-test_dir = 'path_to_test_data'    # Sostituisci con il percorso della tua cartella di test
+# Funzione per caricare e gestire le immagini .tif
+def load_image_tiff(image_path):
+    try:
+        img = Image.open(image_path)
+        img = img.convert("RGB")  # Converte in RGB se non lo è
+        return img
+    except Exception as e:
+        print(f"Errore nel caricare l'immagine {image_path}: {e}")
+        return None
 
-# Crea un ImageDataGenerator per la normalizzazione delle immagini
-train_datagen = ImageDataGenerator(rescale=1./255)
-test_datagen = ImageDataGenerator(rescale=1./255)
+# Personalizzazione di ImageDataGenerator per caricare e gestire le immagini .tif
+class TiffImageDataGenerator(ImageDataGenerator):
+    def flow_from_directory(self, directory, *args, **kwargs):
+        # Usa il metodo originale per ottenere il flusso di file
+        flow = super().flow_from_directory(directory, *args, **kwargs)
+
+        # Modifica il flusso di file per usare il caricamento personalizzato
+        flow.filenames = [f for f in flow.filenames if f.endswith('.tif') or f.endswith('.tiff')]
+
+        # Crea una versione personalizzata di load_img
+        custom_load_img = partial(self.custom_load_img, flow=flow)
+        
+        # Modifica il metodo di caricamento delle immagini
+        load_img = custom_load_img  # Usa la funzione modificata
+        return flow
+
+    def custom_load_img(self, path, flow, *args, **kwargs):
+        # Se l'immagine è TIFF, usa la funzione personalizzata
+        if path.endswith('.tif') or path.endswith('.tiff'):
+            return load_image_tiff(path)
+        else:
+            # Usa la funzione di caricamento immagine standard
+            return load_img(path, *args, **kwargs)
+
+# 2. Preparazione dei dati (Immagini e etichette)
+train_dir = TRAINING  # Sostituisci con il percorso della tua cartella di training
+test_dir = TESTING    # Sostituisci con il percorso della tua cartella di test
+
+# Crea un TiffImageDataGenerator per la normalizzazione delle immagini
+train_datagen = TiffImageDataGenerator(rescale=1./255)
+test_datagen = TiffImageDataGenerator(rescale=1./255)
 
 # Creazione dei generatori di dati per il training e il test
 train_generator = train_datagen.flow_from_directory(
@@ -70,7 +117,7 @@ test_loss, test_acc = modello.evaluate(test_generator)
 print(f"Loss: {test_loss}, Accuracy: {test_acc}")
 
 # 6. Salvataggio del modello
-modello.save('modello.h5')  # Salva il modello allenato
+modello.save(OUTPUT + '/modello.h5')  # Salva il modello allenato
 
 # 7. Caricamento del modello (opzionale, se necessario)
-modello_caricato = tf.keras.models.load_model('modello.h5')
+modello_caricato = tf.keras.models.load_model(OUTPUT + '/modello.h5')
