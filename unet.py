@@ -1,6 +1,8 @@
 import tensorflow as tf
 from tensorflow.keras import layers, models
 from tensorflow.keras.preprocessing import image_dataset_from_directory
+from tensorflow.keras.preprocessing.image import array_to_img
+import os
 
 def unet_model(input_size=(256, 256, 1)):
     inputs = layers.Input(input_size)
@@ -79,6 +81,19 @@ model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy']
 
 # Addestramento del modello
 model.fit(train_dataset, validation_data=val_dataset, epochs=20)
+
+# Funzione per salvare le predizioni come immagini
+def save_predictions(dataset, model, output_dir):
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    for images, _ in dataset:
+        predictions = model.predict(images)
+        for i in range(len(images)):
+            img = array_to_img(predictions[i])
+            img.save(f"{output_dir}/prediction_{i}.png")
+
+# Salva le predizioni del set di validazione
+save_predictions(val_dataset, model, 'path_to_output_directory')
 
 # Visualizzazione del modello
 model.summary()
