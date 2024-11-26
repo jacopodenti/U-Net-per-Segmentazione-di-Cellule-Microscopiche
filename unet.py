@@ -1,5 +1,6 @@
 import tensorflow as tf
 from tensorflow.keras import layers, models
+from tensorflow.keras.preprocessing import image_dataset_from_directory
 
 def unet_model(input_size=(256, 256, 1)):
     inputs = layers.Input(input_size)
@@ -51,9 +52,33 @@ def unet_model(input_size=(256, 256, 1)):
     model = models.Model(inputs=[inputs], outputs=[outputs])
     return model
 
+# Caricamento dei dataset
+train_dataset = image_dataset_from_directory(
+    'path_to_train_directory', #cartella training
+    labels='inferred',
+    label_mode='int',
+    color_mode='grayscale',
+    batch_size=32,
+    image_size=(256, 256),
+    shuffle=True
+)
+
+val_dataset = image_dataset_from_directory(
+    'path_to_val_directory', #cartella validazione
+    labels='inferred',
+    label_mode='int',
+    color_mode='grayscale',
+    batch_size=32,
+    image_size=(256, 256),
+    shuffle=True
+)
+
 # Compilazione del modello
 model = unet_model()
 model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+
+# Addestramento del modello
+model.fit(train_dataset, validation_data=val_dataset, epochs=20)
 
 # Visualizzazione del modello
 model.summary()
