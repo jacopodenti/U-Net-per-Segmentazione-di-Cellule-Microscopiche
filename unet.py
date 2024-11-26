@@ -56,7 +56,7 @@ def unet_model(input_size=(256, 256, 1)):
 
 # Caricamento dei dataset
 train_dataset = image_dataset_from_directory(
-    '/Users/nickucce/Downloads/Training-labeled', #cartella training
+    'path_to_train_directory', #cartella training
     labels='inferred',
     label_mode='int',
     color_mode='grayscale',
@@ -66,7 +66,7 @@ train_dataset = image_dataset_from_directory(
 )
 
 val_dataset = image_dataset_from_directory(
-    '/Users/nickucce/Downloads/Tuning', #cartella validazione
+    'path_to_val_directory', #cartella validazione
     labels='inferred',
     label_mode='int',
     color_mode='grayscale',
@@ -74,6 +74,17 @@ val_dataset = image_dataset_from_directory(
     image_size=(256, 256),
     shuffle=True
 )
+
+# Funzione per preprocessare le etichette
+def preprocess_labels(dataset):
+    def process(image, label):
+        label = tf.expand_dims(label, axis=-1)
+        label = tf.image.resize(label, (256, 256))
+        return image, label
+    return dataset.map(process)
+
+train_dataset = preprocess_labels(train_dataset)
+val_dataset = preprocess_labels(val_dataset)
 
 # Compilazione del modello
 model = unet_model()
@@ -93,7 +104,7 @@ def save_predictions(dataset, model, output_dir):
             img.save(f"{output_dir}/prediction_{i}.png")
 
 # Salva le predizioni del set di validazione
-save_predictions(val_dataset, model, '/Users/nickucce/Downloads/Output')
+save_predictions(val_dataset, model, 'path_to_output_directory')
 
 # Visualizzazione del modello
 model.summary()
