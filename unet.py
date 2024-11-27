@@ -1,123 +1,132 @@
+import os
+import cv2
+import numpy as np
+from PIL import Image
+from tensorflow.keras.utils import to_categorical
+from dotenv import load_dotenv
 import tensorflow as tf
 from tensorflow.keras import layers, models
-from PIL import Image
-from tensorflow.keras.preprocessing.image import ImageDataGenerator, load_img
-from functools import partial  # Importa partial
-import os
-from dotenv import load_dotenv
-import numpy as np
 
 # Carica le variabili d'ambiente dal file .env
 load_dotenv()
 
-# Ora puoi usare le variabili d'ambiente nel tuo codice
-TRAINING = os.getenv('PERCORSO_TRAINING_LABELED')
-TUNING = os.getenv('PERCORSO_TUNING')
-TESTING = os.getenv('PERCORSO_TESTING')
-OUTPUT = os.getenv('PERCORSO_OUTPUT')
+TRAINING_IMAGES = os.getenv('PERCORSO_TRAINING_LABELED')
+TRAINING_LABELS = os.getenv('PERCORSO_TRAINING_LABELED_LABELS')
+TUNING_IMAGES = os.getenv('PERCORSO_TUNING')
+TUNING_LABELS = os.getenv('PERCORSO_TUNING_LABELS')
 
-# 1. Definire la CNN
-def crea_modelo():
-    modello = models.Sequential()
+def collect_files(base_path, file_extension=".tif"):
+    """
+    Raccolta di tutti i file con una specifica estensione da una directory e sottodirectory.
+    """
+    files = []
+    for root, _, filenames in os.walk(base_path):
+        for filename in filenames:
+            if filename.endswith(file_extension):
+                files.append(os.path.join(root, filename))
+    return files
 
-    # Primo layer convoluzionale
-    modello.add(layers.Conv2D(32, (3, 3), activation='relu', input_shape=(32, 32, 3)))
-    modello.add(layers.MaxPooling2D((2, 2)))
+training_images = collect_files(TRAINING_IMAGES, file_extension=".tif")
+training_labels = collect_files(TRAINING_LABELS, file_extension=".tiff")
+tuning_images = collect_files(TUNING_IMAGES, file_extension=".tif")
+tuning_labels = collect_files(TUNING_LABELS, file_extension=".tiff")
 
-    # Secondo layer convoluzionale
-    modello.add(layers.Conv2D(64, (3, 3), activation='relu'))
-    modello.add(layers.MaxPooling2D((2, 2)))
+def apply_threshold(image_path, threshold=128):
+    """
+    Applica il filtro di thresholding a un'immagine.
+    """
+    # Carica l'immagine
+    img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+    
+    # Applica il thresholding
+    _, binary_image = cv2.threshold(img, threshold, 255, cv2.THRESH_BINARY)
+    
+    return binary_image
 
-    # Terzo layer convoluzionale
-    modello.add(layers.Conv2D(64, (3, 3), activation='relu'))
+test_image = training_images[0]  # Scegli un'immagine a caso
+binary_img = apply_threshold(test_image)
 
-    # Flatten e fully connected layer
-    modello.add(layers.Flatten())
-    modello.add(layers.Dense(64, activation='relu'))
+# Visualizza l'immagine originale e quella binaria
+from matplotlib import pyplot as plt
 
-    # Output layer (numero di classi nel dataset)
-    modello.add(layers.Dense(10, activation='softmax'))  # Cambia 10 se hai un numero diverso di classi
+plt.figure(figsize=(10, 5))
+plt.subplot(1, 2, 1)
+plt.title("Originale")
+plt.imshow(cv2.imread(test_image, cv2.IMREAD_GRAYSCALE), cmap="gray")
+plt.subplot(1, 2, 2)
+plt.title("Binary")
+plt.imshow(binary_img, cmap="gray")
+plt.show()
 
-    # Compilazione del modello
-    modello.compile(optimizer='adam',
-                    loss='categorical_crossentropy',  # Usato per classificazione multi-classe
-                    metrics=['accuracy'])
 
-    return modello
-
-# Funzione per caricare e gestire le immagini .tif
-def load_image_tiff(image_path):
-    try:
-        img = Image.open(image_path)
-        img = img.convert("RGB")  # Converte in RGB se non lo è
-        return img
-    except Exception as e:
-        print(f"Errore nel caricare l'immagine {image_path}: {e}")
-        return None
-
-# Personalizzazione di ImageDataGenerator per caricare e gestire le immagini .tif
-class TiffImageDataGenerator(ImageDataGenerator):
-    def flow_from_directory(self, directory, *args, **kwargs):
-        # Usa il metodo originale per ottenere il flusso di file
-        flow = super().flow_from_directory(directory, *args, **kwargs)
-
-        # Modifica il flusso di file per usare il caricamento personalizzato
-        flow.filenames = [f for f in flow.filenames if f.endswith('.tif') or f.endswith('.tiff')]
-
-        # Crea una versione personalizzata di load_img
-        custom_load_img = partial(self.custom_load_img, flow=flow)
+def prepare_dataset(image_paths, label_paths, threshold=128, image_size=(128, 128)):
+    """
+    Prepara il dataset trasformando immagini e label in array numpy.
+    """
+    images = []
+    labels = []
+    
+    for img_path, lbl_path in zip(image_paths, label_paths):
+        # Applica thresholding all'immagine
+        binary_image = apply_threshold(img_path, threshold)
+        binary_image = cv2.resize(binary_image, image_size)  # Ridimensiona
         
-        # Modifica il metodo di caricamento delle immagini
-        load_img = custom_load_img  # Usa la funzione modificata
-        return flow
+        # Carica il file di label e ridimensiona
+        label_image = cv2.imread(lbl_path, cv2.IMREAD_GRAYSCALE)
+        label_image = cv2.resize(label_image, image_size)
+        
+        images.append(binary_image)
+        labels.append(label_image)
+    
+    return np.array(images), np.array(labels)
 
-    def custom_load_img(self, path, flow, *args, **kwargs):
-        # Se l'immagine è TIFF, usa la funzione personalizzata
-        if path.endswith('.tif') or path.endswith('.tiff'):
-            return load_image_tiff(path)
-        else:
-            # Usa la funzione di caricamento immagine standard
-            return load_img(path, *args, **kwargs)
+X_train, y_train = prepare_dataset(training_images, training_labels)
+X_tuning, y_tuning = prepare_dataset(tuning_images, tuning_labels)
 
-# 2. Preparazione dei dati (Immagini e etichette)
-train_dir = TRAINING  # Sostituisci con il percorso della tua cartella di training
-test_dir = TESTING    # Sostituisci con il percorso della tua cartella di test
+# Aggiungiamo un asse per i canali delle immagini (da 2D a 3D)
+X_train = X_train[..., np.newaxis] / 255.0  # Normalizziamo
+X_tuning = X_tuning[..., np.newaxis] / 255.0
 
-# Crea un TiffImageDataGenerator per la normalizzazione delle immagini
-train_datagen = TiffImageDataGenerator(rescale=1./255)
-test_datagen = TiffImageDataGenerator(rescale=1./255)
+def create_cnn(input_shape, num_classes):
+    """
+    Definisce e restituisce un modello CNN.
+    """
+    model = models.Sequential([
+        layers.Conv2D(32, (3, 3), activation='relu', input_shape=input_shape),
+        layers.MaxPooling2D((2, 2)),
+        layers.Conv2D(64, (3, 3), activation='relu'),
+        layers.MaxPooling2D((2, 2)),
+        layers.Flatten(),
+        layers.Dense(128, activation='relu'),
+        layers.Dense(num_classes, activation='softmax')
+    ])
+    return model
 
-# Creazione dei generatori di dati per il training e il test
-train_generator = train_datagen.flow_from_directory(
-    train_dir,  # La cartella con le immagini di training
-    target_size=(32, 32),  # Ridimensiona le immagini (32x32 per CIFAR-10 o adattato per il tuo dataset)
-    batch_size=64,
-    class_mode='categorical'  # Usa 'categorical' per classificazione multi-classe
-)
+# Definisci la forma degli input e il numero di classi
+input_shape = X_train.shape[1:]  # Ad esempio (128, 128, 1)
+num_classes = y_train.shape[-1]  # Numero di classi
 
-test_generator = test_datagen.flow_from_directory(
-    test_dir,  # La cartella con le immagini di test
-    target_size=(32, 32),  # Ridimensiona le immagini (32x32 per CIFAR-10 o adattato per il tuo dataset)
-    batch_size=64,
-    class_mode='categorical'  # Usa 'categorical' per classificazione multi-classe
-)
+model = create_cnn(input_shape, num_classes)
+model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 
-# 3. Creazione del modello
-modello = crea_modelo()
+# Addestramento
+history = model.fit(X_train, y_train, epochs=10, batch_size=32, validation_data=(X_tuning, y_tuning))
 
-# 4. Allenamento del modello
-modello.fit(
-    train_generator,  # Generatore di dati per il training
-    epochs=10,        # Numero di epoche (modifica secondo necessità)
-    validation_data=test_generator  # Generatore di dati per la validazione
-)
 
-# 5. Valutazione del modello
-test_loss, test_acc = modello.evaluate(test_generator)
-print(f"Loss: {test_loss}, Accuracy: {test_acc}")
+loss, accuracy = model.evaluate(X_tuning, y_tuning)
+print(f"Loss: {loss}, Accuracy: {accuracy}")
 
-# 6. Salvataggio del modello
-modello.save(OUTPUT + '/modello.h5')  # Salva il modello allenato
+def predict_image(model, image_path, threshold=128):
+    """
+    Predice la classe di una nuova immagine.
+    """
+    binary_image = apply_threshold(image_path, threshold)
+    binary_image = cv2.resize(binary_image, input_shape[:2])
+    binary_image = binary_image[np.newaxis, ..., np.newaxis] / 255.0
+    
+    prediction = model.predict(binary_image)
+    return np.argmax(prediction)
 
-# 7. Caricamento del modello (opzionale, se necessario)
-modello_caricato = tf.keras.models.load_model(OUTPUT + '/modello.h5')
+new_image = 'path/to/new_image.tif'
+predicted_class = predict_image(model, new_image)
+print(f"La classe prevista è: {predicted_class}")
