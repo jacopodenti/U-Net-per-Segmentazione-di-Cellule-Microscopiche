@@ -4,17 +4,6 @@ from tensorflow.keras import layers, models
 from PIL import Image, UnidentifiedImageError
 import numpy as np
 import matplotlib.pyplot as plt
-from dotenv import load_dotenv
-
-# Load environment variables from .env file
-load_dotenv()
-
-# Paths to the data
-PERCORSO_TRAINING_IMMAGINI = os.getenv('PERCORSO_TRAINING_LABELED')
-PERCORSO_TRAINING_LABELS = os.getenv('PERCORSO_TRAINING_LABELED_LABELS')
-PERCORSO_TUNING_IMMAGINI = os.getenv('PERCORSO_TUNING')
-PERCORSO_TUNING_LABELS = os.getenv('PERCORSO_TUNING_LABELS')
-PERCORSO_OUTPUT = os.getenv('PERCORSO_OUTPUT')
 
 # Funzione per costruire il modello UNet
 def unet_model(input_size=(256, 256, 1)):
@@ -98,6 +87,13 @@ def load_dataset(image_dir, label_dir):
     assert len(images) == len(labels), "Il numero di immagini e etichette non corrisponde."
     return tf.data.Dataset.from_tensor_slices((images, labels))
 
+# Imposta i percorsi direttamente nel codice
+PERCORSO_TRAINING_IMMAGINI = '/Users/utente/Downloads/Training-labeled/images'
+PERCORSO_TRAINING_LABELS = '/Users/utente/Downloads/Training-labeled/labels'
+PERCORSO_TUNING_IMMAGINI = '/Users/utente/Downloads/Tuning/images'
+PERCORSO_TUNING_LABELS = '/Users/utente/Downloads/Tuning/labels'
+PERCORSO_OUTPUT = '/Users/utente/Desktop/output-principi'
+
 # Carica i dataset di addestramento e tuning
 train_dataset = load_dataset(PERCORSO_TRAINING_IMMAGINI, PERCORSO_TRAINING_LABELS)
 tuning_dataset = load_dataset(PERCORSO_TUNING_IMMAGINI, PERCORSO_TUNING_LABELS)
@@ -134,13 +130,13 @@ def visualize_predictions(dataset, model):
             plt.figure(figsize=(15, 5))
             plt.subplot(1, 3, 1)
             plt.title("Input Image")
-            plt.imshow(images[i], cmap='gray')
+            plt.imshow(images[i].numpy().squeeze(), cmap='gray')
             plt.subplot(1, 3, 2)
             plt.title("Predicted Mask")
-            plt.imshow((predictions[i] > 0.5).astype(np.uint8).squeeze(), cmap='gray')  # Binarizza le predizioni
+            plt.imshow((predictions[i].numpy() > 0.5).astype(np.uint8).squeeze(), cmap='gray')  # Binarizza le predizioni
             plt.subplot(1, 3, 3)
             plt.title("Ground Truth")
-            plt.imshow(labels[i].astype(np.uint8).squeeze(), cmap='gray')
+            plt.imshow(labels[i].numpy().astype(np.uint8).squeeze(), cmap='gray')
             plt.show()
 
 # Visualizza alcune predizioni del set di tuning
