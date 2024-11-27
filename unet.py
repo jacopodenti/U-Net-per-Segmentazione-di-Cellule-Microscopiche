@@ -1,135 +1,117 @@
+import os
 import tensorflow as tf
 from tensorflow.keras import layers, models
 from tensorflow.keras.preprocessing import image_dataset_from_directory
-from tensorflow.keras.preprocessing.image import array_to_img
-from tensorflow.keras.layers import Input, Conv3D, MaxPooling3D, Conv3DTranspose, concatenate, Dropout
-import os
-from dotenv import load_dotenv
+from PIL import Image
+import numpy as np
 
-# Carica le variabili d'ambiente dal file .env
-load_dotenv()
-
-# Ora puoi usare le variabili d'ambiente nel tuo codice
-TRAINING = os.getenv('PERCORSO_TRAINING_LABELED')
-TUNING = os.getenv('PERCORSO_TUNING')
-TESTING = os.getenv('PERCORSO_TESTING')
-OUTPUT = os.getenv('PERCORSO_OUTPUT')
-
+# Funzione per costruire il modello UNet
 def unet_model(input_size=(256, 256, 1)):
-    inputs = Input(input_size)
+    inputs = layers.Input(input_size)
+    
     # Encoder
-    c1 = Conv3D(16, (3, 3, 3), activation='relu', padding='same')(inputs)
-    c1 = Dropout(0.1)(c1)
-    c1 = Conv3D(16, (3, 3, 3), activation='relu', padding='same')(c1)
-    p1 = MaxPooling3D((2, 2, 2))(c1)
-
-    c2 = Conv3D(32, (3, 3, 3), activation='relu', padding='same')(p1)
-    c2 = Dropout(0.1)(c2)
-    c2 = Conv3D(32, (3, 3, 3), activation='relu', padding='same')(c2)
-    p2 = MaxPooling3D((2, 2, 2))(c2)
-
-    c3 = Conv3D(64, (3, 3, 3), activation='relu', padding='same')(p2)
-    c3 = Dropout(0.2)(c3)
-    c3 = Conv3D(64, (3, 3, 3), activation='relu', padding='same')(c3)
-    p3 = MaxPooling3D((2, 2, 2))(c3)
-
-    c4 = Conv3D(128, (3, 3, 3), activation='relu', padding='same')(p3)
-    c4 = Dropout(0.2)(c4)
-    c4 = Conv3D(128, (3, 3, 3), activation='relu', padding='same')(c4)
-    p4 = MaxPooling3D((2, 2, 2))(c4)
-
-    # Bottleneck
-    c5 = Conv3D(256, (3, 3, 3), activation='relu', padding='same')(p4)
-    c5 = Dropout(0.3)(c5)
-    c5 = Conv3D(256, (3, 3, 3), activation='relu', padding='same')(c5)
-
+    c1 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(inputs)
+    c1 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(c1)
+    p1 = layers.MaxPooling2D((2, 2))(c1)
+    
+    c2 = layers.Conv2D(128, (3, 3), activation='relu', padding='same')(p1)
+    c2 = layers.Conv2D(128, (3, 3), activation='relu', padding='same')(c2)
+    p2 = layers.MaxPooling2D((2, 2))(c2)
+    
+    c3 = layers.Conv2D(256, (3, 3), activation='relu', padding='same')(p2)
+    c3 = layers.Conv2D(256, (3, 3), activation='relu', padding='same')(c3)
+    p3 = layers.MaxPooling2D((2, 2))(c3)
+    
+    c4 = layers.Conv2D(512, (3, 3), activation='relu', padding='same')(p3)
+    c4 = layers.Conv2D(512, (3, 3), activation='relu', padding='same')(c4)
+    p4 = layers.MaxPooling2D((2, 2))(c4)
+    
+    c5 = layers.Conv2D(1024, (3, 3), activation='relu', padding='same')(p4)
+    c5 = layers.Conv2D(1024, (3, 3), activation='relu', padding='same')(c5)
+    
     # Decoder
-    u6 = Conv3DTranspose(128, (2, 2, 2), strides=(2, 2, 2), padding='same')(c5)
-    u6 = concatenate([u6, c4])
-    c6 = Conv3D(128, (3, 3, 3), activation='relu', padding='same')(u6)
-    c6 = Dropout(0.2)(c6)
-    c6 = Conv3D(128, (3, 3, 3), activation='relu', padding='same')(c6)
+    u6 = layers.Conv2DTranspose(512, (2, 2), strides=(2, 2), padding='same')(c5)
+    u6 = layers.concatenate([u6, c4])
+    c6 = layers.Conv2D(512, (3, 3), activation='relu', padding='same')(u6)
+    c6 = layers.Conv2D(512, (3, 3), activation='relu', padding='same')(c6)
 
-    u7 = Conv3DTranspose(64, (2, 2, 2), strides=(2, 2, 2), padding='same')(c6)
-    u7 = concatenate([u7, c3])
-    c7 = Conv3D(64, (3, 3, 3), activation='relu', padding='same')(u7)
-    c7 = Dropout(0.2)(c7)
-    c7 = Conv3D(64, (3, 3, 3), activation='relu', padding='same')(c7)
+    u7 = layers.Conv2DTranspose(256, (2, 2), strides=(2, 2), padding='same')(c6)
+    u7 = layers.concatenate([u7, c3])
+    c7 = layers.Conv2D(256, (3, 3), activation='relu', padding='same')(u7)
+    c7 = layers.Conv2D(256, (3, 3), activation='relu', padding='same')(c7)
 
-    u8 = Conv3DTranspose(32, (2, 2, 2), strides=(2, 2, 2), padding='same')(c7)
-    u8 = concatenate([u8, c2])
-    c8 = Conv3D(32, (3, 3, 3), activation='relu', padding='same')(u8)
-    c8 = Dropout(0.1)(c8)
-    c8 = Conv3D(32, (3, 3, 3), activation='relu', padding='same')(c8)
+    u8 = layers.Conv2DTranspose(128, (2, 2), strides=(2, 2), padding='same')(c7)
+    u8 = layers.concatenate([u8, c2])
+    c8 = layers.Conv2D(128, (3, 3), activation='relu', padding='same')(u8)
+    c8 = layers.Conv2D(128, (3, 3), activation='relu', padding='same')(c8)
 
-    u9 = Conv3DTranspose(16, (2, 2, 2), strides=(2, 2, 2), padding='same')(c8)
-    u9 = concatenate([u9, c1])
-    c9 = Conv3D(16, (3, 3, 3), activation='relu', padding='same')(u9)
-    c9 = Dropout(0.1)(c9)
-    c9 = Conv3D(16, (3, 3, 3), activation='relu', padding='same')(c9)
+    u9 = layers.Conv2DTranspose(64, (2, 2), strides=(2, 2), padding='same')(c8)
+    u9 = layers.concatenate([u9, c1])
+    c9 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(u9)
+    c9 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(c9)
 
-    outputs = Conv3D(1, (1, 1, 1), activation='sigmoid')(c9)
+    outputs = layers.Conv2D(1, (1, 1), activation='sigmoid')(c9)
 
     model = models.Model(inputs=[inputs], outputs=[outputs])
     return model
 
-train_dataset = image_dataset_from_directory(
-    TRAINING,
-    labels='inferred',
-    label_mode='int',
-    color_mode='grayscale',
-    batch_size=32,
-    image_size=(256, 256),
-    shuffle=True
-)
+# Funzione per caricare le immagini in scala di grigi
+def load_grayscale_images(directory):
+    images = []
+    for filename in sorted(os.listdir(directory)):
+        if filename.endswith('.tiff'):
+            img = Image.open(os.path.join(directory, filename)).convert('L')
+            img = img.resize((256, 256))
+            images.append(np.array(img))
+    return np.array(images)
 
-val_dataset = image_dataset_from_directory(
-    TUNING,
-    labels='inferred',
-    label_mode='int',
-    color_mode='grayscale',
-    batch_size=32,
-    image_size=(256, 256),
-    shuffle=True
-)
-def preprocess_labels(dataset):
-    def process(image, label):
-        # Espandi le dimensioni di 'label' per includere il canale
-        label = tf.expand_dims(label, axis=-1)  # (batch_size, height, width) -> (batch_size, height, width, 1)
-        label = tf.image.resize(label, (256, 256))  # Ridimensiona l'etichetta a 256x256
-        
-        # Ridimensiona anche l'immagine
-        image = tf.image.resize(image, (256, 256))
-        
-        # Stampa per il debug
-        print(f"Image shape: {image.shape}")
-        print(f"Label shape: {label.shape}")
-        
-        return image, label
-    return dataset.map(process)
+# Funzione per caricare le etichette in formato TIFF
+def load_tiff_labels(directory):
+    labels = []
+    for filename in sorted(os.listdir(directory)):
+        if filename.endswith('.tiff'):
+            img = Image.open(os.path.join(directory, filename))
+            img = img.resize((256, 256))
+            labels.append(np.array(img))
+    return np.array(labels)
 
-train_dataset = preprocess_labels(train_dataset)
-val_dataset = preprocess_labels(val_dataset)
+# Carica le immagini e le etichette
+def load_dataset(image_dir, label_dir):
+    images = load_grayscale_images(image_dir)
+    labels = load_tiff_labels(label_dir)
+    assert len(images) == len(labels), "Il numero di immagini e etichette non corrisponde."
+    return tf.data.Dataset.from_tensor_slices((images, labels))
 
-# Compilazione del modello
+# Imposta i percorsi direttamente nel codice
+PERCORSO_TRAINING_IMMAGINI = '/Users/utente/Downloads/Training-labeled/images'
+PERCORSO_TRAINING_LABELS = '/Users/utente/Downloads/Training-labeled/labels'
+PERCORSO_TUNING_IMMAGINI = '/Users/utente/Downloads/Tuning/images'
+PERCORSO_TUNING_LABELS = '/Users/utente/Downloads/Tuning/labels'
+PERCORSO_OUTPUT = '/Users/utente/Desktop/output-principi'
+
+# Carica i dataset di addestramento e tuning
+train_dataset = load_dataset(PERCORSO_TRAINING_IMMAGINI, PERCORSO_TRAINING_LABELS)
+tuning_dataset = load_dataset(PERCORSO_TUNING_IMMAGINI, PERCORSO_TUNING_LABELS)
+
+# Costruisci e compila il modello
 model = unet_model()
 model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
 
-# Addestramento del modello
-model.fit(train_dataset, validation_data=val_dataset, epochs=20)
+# Addestra il modello
+model.fit(train_dataset.batch(32), validation_data=tuning_dataset.batch(32), epochs=10)
 
-# Funzione per salvare le predizioni come immagini
+# Funzione per salvare le predizioni come immagini JPEG
 def save_predictions(dataset, model, output_dir):
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-    for images, _ in dataset:
+    for i, (images, _) in enumerate(dataset):
         predictions = model.predict(images)
-        for i in range(len(images)):
-            img = array_to_img(predictions[i])
-            img.save(f"{output_dir}/prediction_{i}.png")
+        for j in range(len(images)):
+            img = Image.fromarray((predictions[j] * 255).astype(np.uint8))
+            img.save(os.path.join(output_dir, f"prediction_{i}_{j}.jpeg"))
 
-# Salva le predizioni del set di validazione
-save_predictions(val_dataset, model, OUTPUT)
+# Salva le predizioni del set di tuning
+save_predictions(tuning_dataset.batch(32), model, PERCORSO_OUTPUT)
 
 # Visualizzazione del modello
 model.summary()
