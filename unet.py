@@ -1,8 +1,7 @@
 import os
 import tensorflow as tf
 from tensorflow.keras import layers, models
-from tensorflow.keras.preprocessing import image_dataset_from_directory
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 import numpy as np
 from dotenv import load_dotenv
 
@@ -70,27 +69,37 @@ def unet_model(input_size=(256, 256, 1)):
 # Funzione per caricare le immagini in scala di grigi
 def load_grayscale_images(directory):
     images = []
+    filenames = []
     for filename in sorted(os.listdir(directory)):
-        if filename.endswith('.tiff'):
-            img = Image.open(os.path.join(directory, filename)).convert('L')
-            img = img.resize((256, 256))
-            images.append(np.array(img))
-    return np.array(images)
+        if filename.lower().endswith('.tiff'):
+            try:
+                img = Image.open(os.path.join(directory, filename)).convert('L')
+                img = img.resize((256, 256))
+                images.append(np.array(img))
+                filenames.append(filename)
+            except (IOError, UnidentifiedImageError) as e:
+                print(f"Errore nel caricamento dell'immagine {filename}: {e}")
+    return np.array(images), filenames
 
-# Funzione per caricare le etichette in formato TIFF
-def load_tiff_labels(directory):
+# Funzione per caricare le etichette in formato TIFF corrispondenti alle immagini trovate
+def load_tiff_labels(directory, filenames):
     labels = []
-    for filename in sorted(os.listdir(directory)):
-        if filename.endswith('.tiff'):
-            img = Image.open(os.path.join(directory, filename))
+    for filename in filenames:
+        label_filename = filename.replace('.tiff', '_label.tiff')
+        try:
+            img = Image.open(os.path.join(directory, label_filename))
             img = img.resize((256, 256))
             labels.append(np.array(img))
+        except (IOError, UnidentifiedImageError) as e:
+            print(f"Errore nel caricamento dell'etichetta {label_filename}: {e}")
     return np.array(labels)
 
 # Carica le immagini e le etichette
 def load_dataset(image_dir, label_dir):
-    images = load_grayscale_images(image_dir)
-    labels = load_tiff_labels(label_dir)
+    images, filenames = load_grayscale_images(image_dir)
+    labels = load_tiff_labels(label_dir, filenames)
+    print(f"Numero di immagini caricate: {len(images)}")
+    print(f"Numero di etichette caricate: {len(labels)}")
     assert len(images) == len(labels), "Il numero di immagini e etichette non corrisponde."
     return tf.data.Dataset.from_tensor_slices((images, labels))
 
@@ -112,7 +121,8 @@ def save_predictions(dataset, model, output_dir):
     for i, (images, _) in enumerate(dataset):
         predictions = model.predict(images)
         for j in range(len(images)):
-            img = Image.fromarray((predictions[j] * 255).astype(np.uint8))
+            pred = predictions[j].squeeze()  # Rimuovi dimensioni inutili
+            img = Image.fromarray((pred * 255).astype(np.uint8), mode='L')
             img.save(os.path.join(output_dir, f"prediction_{i}_{j}.jpeg"))
 
 # Salva le predizioni del set di tuning
