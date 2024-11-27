@@ -4,17 +4,6 @@ from tensorflow.keras import layers, models
 from PIL import Image, UnidentifiedImageError
 import numpy as np
 import matplotlib.pyplot as plt
-from dotenv import load_dotenv
-
-# Load environment variables from .env file
-load_dotenv()
-
-# Paths to the data
-PERCORSO_TRAINING_IMMAGINI = os.getenv('PERCORSO_TRAINING_LABELED')
-PERCORSO_TRAINING_LABELS = os.getenv('PERCORSO_TRAINING_LABELED_LABELS')
-PERCORSO_TUNING_IMMAGINI = os.getenv('PERCORSO_TUNING')
-PERCORSO_TUNING_LABELS = os.getenv('PERCORSO_TUNING_LABELS')
-PERCORSO_OUTPUT = os.getenv('PERCORSO_OUTPUT')
 
 # Funzione per costruire il modello UNet
 def unet_model(input_size=(256, 256, 1)):
@@ -66,37 +55,51 @@ def unet_model(input_size=(256, 256, 1)):
     model = models.Model(inputs=[inputs], outputs=[outputs])
     return model
 
-# Funzione per caricare le immagini in scala di grigi e le etichette corrispondenti
-def load_grayscale_images_and_labels(image_dir, label_dir):
+# Funzione per caricare le immagini in scala di grigi
+def load_grayscale_images(directory):
     images = []
-    labels = []
     filenames = []
-    for filename in sorted(os.listdir(image_dir)):
-        if filename.lower().endswith(('.tiff', '.tif', '.png', '.bmp')):
-            label_filename = os.path.splitext(filename)[0] + '_label.tiff'
-            label_path = os.path.join(label_dir, label_filename)
-            if os.path.exists(label_path):
-                try:
-                    img = Image.open(os.path.join(image_dir, filename)).convert('L')
-                    img = img.resize((256, 256))
-                    img = np.array(img) / 255.0  # Normalizza i valori dei pixel tra 0 e 1
-                    label = Image.open(label_path).convert('L')
-                    label = label.resize((256, 256))
-                    label = np.array(label) / 255.0  # Normalizza i valori dei pixel tra 0 e 1
-                    images.append(img)
-                    labels.append(label)
-                    filenames.append(filename)
-                except (IOError, UnidentifiedImageError) as e:
-                    print(f"Errore nel caricamento dell'immagine o dell'etichetta {filename}: {e}")
-    return np.array(images), np.array(labels), filenames
+    for filename in sorted(os.listdir(directory)):
+        if filename.lower().endswith(('.tiff', '.tif')):
+            try:
+                img = Image.open(os.path.join(directory, filename)).convert('L')
+                img = img.resize((256, 256))
+                img = np.array(img) / 255.0  # Normalizza i valori dei pixel tra 0 e 1
+                images.append(img)
+                filenames.append(filename)
+            except (IOError, UnidentifiedImageError) as e:
+                print(f"Errore nel caricamento dell'immagine {filename}: {e}")
+    return np.array(images), filenames
+
+# Funzione per caricare le etichette in formato TIFF corrispondenti alle immagini trovate
+def load_tiff_labels(directory, filenames):
+    labels = []
+    for filename in filenames:
+        label_filename = filename.replace('.tiff', '_label.tiff').replace('.tif', '_label.tiff')
+        try:
+            img = Image.open(os.path.join(directory, label_filename))
+            img = img.resize((256, 256))
+            img = np.array(img) / 255.0  # Normalizza i valori dei pixel tra 0 e 1
+            labels.append(img)
+        except (IOError, UnidentifiedImageError) as e:
+            print(f"Errore nel caricamento dell'etichetta {label_filename}: {e}")
+    return np.array(labels)
 
 # Carica le immagini e le etichette
 def load_dataset(image_dir, label_dir):
-    images, labels, filenames = load_grayscale_images_and_labels(image_dir, label_dir)
+    images, filenames = load_grayscale_images(image_dir)
+    labels = load_tiff_labels(label_dir, filenames)
     print(f"Numero di immagini caricate: {len(images)}")
     print(f"Numero di etichette caricate: {len(labels)}")
     assert len(images) == len(labels), "Il numero di immagini e etichette non corrisponde."
     return tf.data.Dataset.from_tensor_slices((images, labels))
+
+# Imposta i percorsi direttamente nel codice
+PERCORSO_TRAINING_IMMAGINI = '/Users/utente/Downloads/Training-labeled/images'
+PERCORSO_TRAINING_LABELS = '/Users/utente/Downloads/Training-labeled/labels'
+PERCORSO_TUNING_IMMAGINI = '/Users/utente/Downloads/Tuning/images'
+PERCORSO_TUNING_LABELS = '/Users/utente/Downloads/Tuning/labels'
+PERCORSO_OUTPUT = '/Users/utente/Desktop/output-principi'
 
 # Carica i dataset di addestramento e tuning
 train_dataset = load_dataset(PERCORSO_TRAINING_IMMAGINI, PERCORSO_TRAINING_LABELS)
@@ -109,28 +112,39 @@ model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy']
 # Addestra il modello
 model.fit(train_dataset.batch(32), validation_data=tuning_dataset.batch(32), epochs=10)
 
-# Salva il modello addestrato
-model.save('unet_model.h5')
-
-# Funzione per fare predizioni su nuove immagini
-def predict_new_images(model, image_dir, output_dir):
-    images, _, filenames = load_grayscale_images_and_labels(image_dir, image_dir)  # Carica solo le immagini
-    if len(images) == 0:
-        print("Nessuna immagine trovata nella directory.")
-        return
-    predictions = model.predict(images)
+# Funzione per salvare le predizioni come immagini JPEG
+def save_predictions(dataset, model, output_dir):
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-    for i, filename in enumerate(filenames):
-        pred = (predictions[i] > 0.5).astype(np.uint8)  # Binarizza le predizioni
-        img = Image.fromarray(pred.squeeze() * 255, mode='L')
-        img.save(os.path.join(output_dir, f"prediction_{filename}"))
+    for i, (images, _) in enumerate(dataset):
+        predictions = model.predict(images)
+        for j in range(len(images)):
+            pred = (predictions[j] > 0.5).astype(np.uint8)  # Binarizza le predizioni
+            img = Image.fromarray(pred.squeeze() * 255, mode='L')
+            img.save(os.path.join(output_dir, f"prediction_{i}_{j}.jpeg"))
 
-# Carica il modello addestrato
-model = tf.keras.models.load_model('unet_model.h5')
+# Salva le predizioni del set di tuning
+save_predictions(tuning_dataset.batch(32), model, PERCORSO_OUTPUT)
 
-# Percorso delle nuove immagini da predire
-PERCORSO_NUOVE_IMMAGINI = './Nuoveimmagini'
+# Visualizzazione del modello
+model.summary()
 
-# Fai predizioni sulle nuove immagini
-predict_new_images(model, PERCORSO_NUOVE_IMMAGINI, PERCORSO_OUTPUT)
+# Visualizza alcune predizioni per verifica
+def visualize_predictions(dataset, model):
+    for images, labels in dataset.take(1):
+        predictions = model.predict(images)
+        for i in range(min(5, len(images))):
+            plt.figure(figsize=(15, 5))
+            plt.subplot(1, 3, 1)
+            plt.title("Input Image")
+            plt.imshow(images[i], cmap='gray')
+            plt.subplot(1, 3, 2)
+            plt.title("Predicted Mask")
+            plt.imshow((predictions[i] > 0.5).astype(np.uint8).squeeze(), cmap='gray')  # Binarizza le predizioni
+            plt.subplot(1, 3, 3)
+            plt.title("Ground Truth")
+            plt.imshow(labels[i].astype(np.uint8).squeeze(), cmap='gray')
+            plt.show()
+
+# Visualizza alcune predizioni del set di tuning
+visualize_predictions(tuning_dataset.batch(32), model)
