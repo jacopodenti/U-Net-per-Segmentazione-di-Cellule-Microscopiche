@@ -9,12 +9,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Ora puoi usare le variabili d'ambiente nel tuo codice
-PERCORSO_TRAINING_IMMAGINI = os.getenv('PERCORSO_TRAINING_LABELED')
-PERCORSO_TRAINING_LABELS = os.getenv('PERCORSO_TRAINING_LABELED_LABELS')
-PERCORSO_TUNING_IMMAGINI = os.getenv('PERCORSO_TUNING')
-PERCORSO_TUNING_LABELS = os.getenv('PERCORSO_TUNING_LABELS')
-TESTING = os.getenv('PERCORSO_TESTING')
-PERCORSO_OUTPUT = os.getenv('PERCORSO_OUTPUT')
+PERCORSO_TRAINING_IMMAGINI = os.getenv('PERCORSO_TRAINING_IMMAGINI', '/Users/utente/Downloads/Training-labeled/images')
+PERCORSO_TRAINING_LABELS = os.getenv('PERCORSO_TRAINING_LABELS', '/Users/utente/Downloads/Training-labeled/labels')
+PERCORSO_TUNING_IMMAGINI = os.getenv('PERCORSO_TUNING_IMMAGINI', '/Users/utente/Downloads/Tuning/images')
+PERCORSO_TUNING_LABELS = os.getenv('PERCORSO_TUNING_LABELS', '/Users/utente/Downloads/Tuning/labels')
+PERCORSO_OUTPUT = os.getenv('PERCORSO_OUTPUT', '/Users/utente/Desktop/output-principi')
 
 # Funzione per costruire il modello UNet
 def unet_model(input_size=(256, 256, 1)):
