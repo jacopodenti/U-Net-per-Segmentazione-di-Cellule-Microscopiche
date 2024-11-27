@@ -67,39 +67,32 @@ def unet_model(input_size=(256, 256, 1)):
     return model
 
 # Funzione per caricare le immagini in scala di grigi
-def load_grayscale_images(directory):
+def load_grayscale_images_and_labels(image_dir, label_dir):
     images = []
-    filenames = []
-    for filename in sorted(os.listdir(directory)):
-        if filename.lower().endswith(('.tiff', '.tif')):
-            try:
-                img = Image.open(os.path.join(directory, filename)).convert('L')
-                img = img.resize((256, 256))
-                img = np.array(img) / 255.0  # Normalizza i valori dei pixel tra 0 e 1
-                images.append(img)
-                filenames.append(filename)
-            except (IOError, UnidentifiedImageError) as e:
-                print(f"Errore nel caricamento dell'immagine {filename}: {e}")
-    return np.array(images), filenames
-
-# Funzione per caricare le etichette in formato TIFF corrispondenti alle immagini trovate
-def load_tiff_labels(directory, filenames):
     labels = []
-    for filename in filenames:
-        label_filename = filename.replace('.tiff', '_label.tiff').replace('.tif', '_label.tiff')
-        try:
-            img = Image.open(os.path.join(directory, label_filename))
-            img = img.resize((256, 256))
-            img = np.array(img) / 255.0  # Normalizza i valori dei pixel tra 0 e 1
-            labels.append(img)
-        except (IOError, UnidentifiedImageError) as e:
-            print(f"Errore nel caricamento dell'etichetta {label_filename}: {e}")
-    return np.array(labels)
+    filenames = []
+    for filename in sorted(os.listdir(image_dir)):
+        if filename.lower().endswith(('.tiff', '.tif')):
+            label_filename = filename.replace('.tiff', '_label.tiff').replace('.tif', '_label.tiff')
+            label_path = os.path.join(label_dir, label_filename)
+            if os.path.exists(label_path):
+                try:
+                    img = Image.open(os.path.join(image_dir, filename)).convert('L')
+                    img = img.resize((256, 256))
+                    img = np.array(img) / 255.0  # Normalizza i valori dei pixel tra 0 e 1
+                    label = Image.open(label_path).convert('L')
+                    label = label.resize((256, 256))
+                    label = np.array(label) / 255.0  # Normalizza i valori dei pixel tra 0 e 1
+                    images.append(img)
+                    labels.append(label)
+                    filenames.append(filename)
+                except (IOError, UnidentifiedImageError) as e:
+                    print(f"Errore nel caricamento dell'immagine o dell'etichetta {filename}: {e}")
+    return np.array(images), np.array(labels), filenames
 
 # Carica le immagini e le etichette
 def load_dataset(image_dir, label_dir):
-    images, filenames = load_grayscale_images(image_dir)
-    labels = load_tiff_labels(label_dir, filenames)
+    images, labels, filenames = load_grayscale_images_and_labels(image_dir, label_dir)
     print(f"Numero di immagini caricate: {len(images)}")
     print(f"Numero di etichette caricate: {len(labels)}")
     assert len(images) == len(labels), "Il numero di immagini e etichette non corrisponde."
