@@ -130,13 +130,13 @@ def visualize_predictions(dataset, model):
             plt.figure(figsize=(15, 5))
             plt.subplot(1, 3, 1)
             plt.title("Input Image")
-            plt.imshow(images[i].numpy().squeeze(), cmap='gray')
+            plt.imshow(images[i].squeeze(), cmap='gray')  # Rimuovi .numpy() qui
             plt.subplot(1, 3, 2)
             plt.title("Predicted Mask")
-            plt.imshow((predictions[i].numpy() > 0.5).astype(np.uint8).squeeze(), cmap='gray')  # Binarizza le predizioni
+            plt.imshow((predictions[i] > 0.5).astype(np.uint8).squeeze(), cmap='gray')  # Binarizza le predizioni
             plt.subplot(1, 3, 3)
             plt.title("Ground Truth")
-            plt.imshow(labels[i].numpy().astype(np.uint8).squeeze(), cmap='gray')
+            plt.imshow(labels[i].squeeze(), cmap='gray')  # Rimuovi .numpy() qui
             plt.show()
 
 # Visualizza alcune predizioni del set di tuning
