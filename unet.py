@@ -1,122 +1,132 @@
 import os
+import cv2
+import numpy as np
+from PIL import Image
+from tensorflow.keras.utils import to_categorical
+from dotenv import load_dotenv
 import tensorflow as tf
 from tensorflow.keras import layers, models
-from tensorflow.keras.preprocessing import image_dataset_from_directory
-from PIL import Image
-import numpy as np
-from dotenv import load_dotenv
 
 # Carica le variabili d'ambiente dal file .env
 load_dotenv()
 
-# Ora puoi usare le variabili d'ambiente nel tuo codice
-PERCORSO_TRAINING_IMMAGINI = os.getenv('PERCORSO_TRAINING_LABELED')
-PERCORSO_TRAINING_LABELS = os.getenv('PERCORSO_TRAINING_LABELED_LABELS')
-PERCORSO_TUNING_IMMAGINI = os.getenv('PERCORSO_TUNING')
-PERCORSO_TUNING_LABELS = os.getenv('PERCORSO_TUNING_LABELS')
-TESTING = os.getenv('PERCORSO_TESTING')
-PERCORSO_OUTPUT = os.getenv('PERCORSO_OUTPUT')
+TRAINING_IMAGES = os.getenv('PERCORSO_TRAINING_LABELED')
+TRAINING_LABELS = os.getenv('PERCORSO_TRAINING_LABELED_LABELS')
+TUNING_IMAGES = os.getenv('PERCORSO_TUNING')
+TUNING_LABELS = os.getenv('PERCORSO_TUNING_LABELS')
 
-# Funzione per costruire il modello UNet
-def unet_model(input_size=(256, 256, 1)):
-    inputs = layers.Input(input_size)
-    
-    # Encoder
-    c1 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(inputs)
-    c1 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(c1)
-    p1 = layers.MaxPooling2D((2, 2))(c1)
-    
-    c2 = layers.Conv2D(128, (3, 3), activation='relu', padding='same')(p1)
-    c2 = layers.Conv2D(128, (3, 3), activation='relu', padding='same')(c2)
-    p2 = layers.MaxPooling2D((2, 2))(c2)
-    
-    c3 = layers.Conv2D(256, (3, 3), activation='relu', padding='same')(p2)
-    c3 = layers.Conv2D(256, (3, 3), activation='relu', padding='same')(c3)
-    p3 = layers.MaxPooling2D((2, 2))(c3)
-    
-    c4 = layers.Conv2D(512, (3, 3), activation='relu', padding='same')(p3)
-    c4 = layers.Conv2D(512, (3, 3), activation='relu', padding='same')(c4)
-    p4 = layers.MaxPooling2D((2, 2))(c4)
-    
-    c5 = layers.Conv2D(1024, (3, 3), activation='relu', padding='same')(p4)
-    c5 = layers.Conv2D(1024, (3, 3), activation='relu', padding='same')(c5)
-    
-    # Decoder
-    u6 = layers.Conv2DTranspose(512, (2, 2), strides=(2, 2), padding='same')(c5)
-    u6 = layers.concatenate([u6, c4])
-    c6 = layers.Conv2D(512, (3, 3), activation='relu', padding='same')(u6)
-    c6 = layers.Conv2D(512, (3, 3), activation='relu', padding='same')(c6)
+def collect_files(base_path, file_extension=".tif"):
+    """
+    Raccolta di tutti i file con una specifica estensione da una directory e sottodirectory.
+    """
+    files = []
+    for root, _, filenames in os.walk(base_path):
+        for filename in filenames:
+            if filename.endswith(file_extension):
+                files.append(os.path.join(root, filename))
+    return files
 
-    u7 = layers.Conv2DTranspose(256, (2, 2), strides=(2, 2), padding='same')(c6)
-    u7 = layers.concatenate([u7, c3])
-    c7 = layers.Conv2D(256, (3, 3), activation='relu', padding='same')(u7)
-    c7 = layers.Conv2D(256, (3, 3), activation='relu', padding='same')(c7)
+training_images = collect_files(TRAINING_IMAGES, file_extension=".tif")
+training_labels = collect_files(TRAINING_LABELS, file_extension=".tiff")
+tuning_images = collect_files(TUNING_IMAGES, file_extension=".tif")
+tuning_labels = collect_files(TUNING_LABELS, file_extension=".tiff")
 
-    u8 = layers.Conv2DTranspose(128, (2, 2), strides=(2, 2), padding='same')(c7)
-    u8 = layers.concatenate([u8, c2])
-    c8 = layers.Conv2D(128, (3, 3), activation='relu', padding='same')(u8)
-    c8 = layers.Conv2D(128, (3, 3), activation='relu', padding='same')(c8)
+def apply_threshold(image_path, threshold=128):
+    """
+    Applica il filtro di thresholding a un'immagine.
+    """
+    # Carica l'immagine
+    img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+    
+    # Applica il thresholding
+    _, binary_image = cv2.threshold(img, threshold, 255, cv2.THRESH_BINARY)
+    
+    return binary_image
 
-    u9 = layers.Conv2DTranspose(64, (2, 2), strides=(2, 2), padding='same')(c8)
-    u9 = layers.concatenate([u9, c1])
-    c9 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(u9)
-    c9 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(c9)
+test_image = training_images[0]  # Scegli un'immagine a caso
+binary_img = apply_threshold(test_image)
 
-    outputs = layers.Conv2D(1, (1, 1), activation='sigmoid')(c9)
+# Visualizza l'immagine originale e quella binaria
+from matplotlib import pyplot as plt
 
-    model = models.Model(inputs=[inputs], outputs=[outputs])
+plt.figure(figsize=(10, 5))
+plt.subplot(1, 2, 1)
+plt.title("Originale")
+plt.imshow(cv2.imread(test_image, cv2.IMREAD_GRAYSCALE), cmap="gray")
+plt.subplot(1, 2, 2)
+plt.title("Binary")
+plt.imshow(binary_img, cmap="gray")
+plt.show()
+
+
+def prepare_dataset(image_paths, label_paths, threshold=128, image_size=(128, 128)):
+    """
+    Prepara il dataset trasformando immagini e label in array numpy.
+    """
+    images = []
+    labels = []
+    
+    for img_path, lbl_path in zip(image_paths, label_paths):
+        # Applica thresholding all'immagine
+        binary_image = apply_threshold(img_path, threshold)
+        binary_image = cv2.resize(binary_image, image_size)  # Ridimensiona
+        
+        # Carica il file di label e ridimensiona
+        label_image = cv2.imread(lbl_path, cv2.IMREAD_GRAYSCALE)
+        label_image = cv2.resize(label_image, image_size)
+        
+        images.append(binary_image)
+        labels.append(label_image)
+    
+    return np.array(images), np.array(labels)
+
+X_train, y_train = prepare_dataset(training_images, training_labels)
+X_tuning, y_tuning = prepare_dataset(tuning_images, tuning_labels)
+
+# Aggiungiamo un asse per i canali delle immagini (da 2D a 3D)
+X_train = X_train[..., np.newaxis] / 255.0  # Normalizziamo
+X_tuning = X_tuning[..., np.newaxis] / 255.0
+
+def create_cnn(input_shape, num_classes):
+    """
+    Definisce e restituisce un modello CNN.
+    """
+    model = models.Sequential([
+        layers.Conv2D(32, (3, 3), activation='relu', input_shape=input_shape),
+        layers.MaxPooling2D((2, 2)),
+        layers.Conv2D(64, (3, 3), activation='relu'),
+        layers.MaxPooling2D((2, 2)),
+        layers.Flatten(),
+        layers.Dense(128, activation='relu'),
+        layers.Dense(num_classes, activation='softmax')
+    ])
     return model
 
-# Funzione per caricare le immagini in scala di grigi
-def load_grayscale_images(directory):
-    images = []
-    for filename in sorted(os.listdir(directory)):
-        if filename.endswith('.tiff'):
-            img = Image.open(os.path.join(directory, filename)).convert('L')
-            img = img.resize((256, 256))
-            images.append(np.array(img))
-    return np.array(images)
+# Definisci la forma degli input e il numero di classi
+input_shape = X_train.shape[1:]  # Ad esempio (128, 128, 1)
+num_classes = y_train.shape[-1]  # Numero di classi
 
-# Funzione per caricare le etichette in formato TIFF
-def load_tiff_labels(directory):
-    labels = []
-    for filename in sorted(os.listdir(directory)):
-        if filename.endswith('.tiff'):
-            img = Image.open(os.path.join(directory, filename))
-            img = img.resize((256, 256))
-            labels.append(np.array(img))
-    return np.array(labels)
+model = create_cnn(input_shape, num_classes)
+model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 
-# Carica le immagini e le etichette
-def load_dataset(image_dir, label_dir):
-    images = load_grayscale_images(image_dir)
-    labels = load_tiff_labels(label_dir)
-    assert len(images) == len(labels), "Il numero di immagini e etichette non corrisponde."
-    return tf.data.Dataset.from_tensor_slices((images, labels))
+# Addestramento
+history = model.fit(X_train, y_train, epochs=10, batch_size=32, validation_data=(X_tuning, y_tuning))
 
-# Carica i dataset di addestramento e tuning
-train_dataset = load_dataset(PERCORSO_TRAINING_IMMAGINI, PERCORSO_TRAINING_LABELS)
-tuning_dataset = load_dataset(PERCORSO_TUNING_IMMAGINI, PERCORSO_TUNING_LABELS)
 
-# Costruisci e compila il modello
-model = unet_model()
-model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+loss, accuracy = model.evaluate(X_tuning, y_tuning)
+print(f"Loss: {loss}, Accuracy: {accuracy}")
 
-# Addestra il modello
-model.fit(train_dataset.batch(32), validation_data=tuning_dataset.batch(32), epochs=10)
+def predict_image(model, image_path, threshold=128):
+    """
+    Predice la classe di una nuova immagine.
+    """
+    binary_image = apply_threshold(image_path, threshold)
+    binary_image = cv2.resize(binary_image, input_shape[:2])
+    binary_image = binary_image[np.newaxis, ..., np.newaxis] / 255.0
+    
+    prediction = model.predict(binary_image)
+    return np.argmax(prediction)
 
-# Funzione per salvare le predizioni come immagini JPEG
-def save_predictions(dataset, model, output_dir):
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-    for i, (images, _) in enumerate(dataset):
-        predictions = model.predict(images)
-        for j in range(len(images)):
-            img = Image.fromarray((predictions[j] * 255).astype(np.uint8))
-            img.save(os.path.join(output_dir, f"prediction_{i}_{j}.jpeg"))
-
-# Salva le predizioni del set di tuning
-save_predictions(tuning_dataset.batch(32), model, PERCORSO_OUTPUT)
-
-# Visualizzazione del modello
-model.summary()
+new_image = 'path/to/new_image.tif'
+predicted_class = predict_image(model, new_image)
+print(f"La classe prevista è: {predicted_class}")
