@@ -119,8 +119,8 @@ def save_predictions(dataset, model, output_dir):
     for i, (images, _) in enumerate(dataset):
         predictions = model.predict(images)
         for j in range(len(images)):
-            pred = predictions[j].squeeze()  # Rimuovi dimensioni inutili
-            img = Image.fromarray((pred * 255).astype(np.uint8), mode='L')
+            pred = (predictions[j] > 0.5).astype(np.uint8)  # Binarizza le predizioni
+            img = Image.fromarray(pred.squeeze() * 255, mode='L')
             img.save(os.path.join(output_dir, f"prediction_{i}_{j}.jpeg"))
 
 # Salva le predizioni del set di tuning
@@ -131,19 +131,19 @@ model.summary()
 
 # Visualizza alcune predizioni per verifica
 def visualize_predictions(dataset, model):
-    for images, _ in dataset.take(1):
+    for images, labels in dataset.take(1):
         predictions = model.predict(images)
         for i in range(min(5, len(images))):
-            plt.figure(figsize=(10, 5))
+            plt.figure(figsize=(15, 5))
             plt.subplot(1, 3, 1)
             plt.title("Input Image")
             plt.imshow(images[i], cmap='gray')
             plt.subplot(1, 3, 2)
             plt.title("Predicted Mask")
-            plt.imshow(predictions[i].squeeze(), cmap='gray')
+            plt.imshow((predictions[i] > 0.5).squeeze(), cmap='gray')  # Binarizza le predizioni
             plt.subplot(1, 3, 3)
             plt.title("Ground Truth")
-            plt.imshow(images[i], cmap='gray')
+            plt.imshow(labels[i].squeeze(), cmap='gray')
             plt.show()
 
 # Visualizza alcune predizioni del set di tuning
