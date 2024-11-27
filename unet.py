@@ -3,17 +3,7 @@ import tensorflow as tf
 from tensorflow.keras import layers, models
 from PIL import Image, UnidentifiedImageError
 import numpy as np
-from dotenv import load_dotenv
-
-# Carica le variabili d'ambiente dal file .env
-load_dotenv()
-
-# Ora puoi usare le variabili d'ambiente nel tuo codice
-PERCORSO_TRAINING_IMMAGINI = os.getenv('PERCORSO_TRAINING_IMMAGINI', '/Users/utente/Downloads/Training-labeled/images')
-PERCORSO_TRAINING_LABELS = os.getenv('PERCORSO_TRAINING_LABELS', '/Users/utente/Downloads/Training-labeled/labels')
-PERCORSO_TUNING_IMMAGINI = os.getenv('PERCORSO_TUNING_IMMAGINI', '/Users/utente/Downloads/Tuning/images')
-PERCORSO_TUNING_LABELS = os.getenv('PERCORSO_TUNING_LABELS', '/Users/utente/Downloads/Tuning/labels')
-PERCORSO_OUTPUT = os.getenv('PERCORSO_OUTPUT', '/Users/utente/Desktop/output-principi')
+import matplotlib.pyplot as plt
 
 # Funzione per costruire il modello UNet
 def unet_model(input_size=(256, 256, 1)):
@@ -74,7 +64,8 @@ def load_grayscale_images(directory):
             try:
                 img = Image.open(os.path.join(directory, filename)).convert('L')
                 img = img.resize((256, 256))
-                images.append(np.array(img))
+                img = np.array(img) / 255.0  # Normalizza i valori dei pixel tra 0 e 1
+                images.append(img)
                 filenames.append(filename)
             except (IOError, UnidentifiedImageError) as e:
                 print(f"Errore nel caricamento dell'immagine {filename}: {e}")
@@ -88,7 +79,8 @@ def load_tiff_labels(directory, filenames):
         try:
             img = Image.open(os.path.join(directory, label_filename))
             img = img.resize((256, 256))
-            labels.append(np.array(img))
+            img = np.array(img) / 255.0  # Normalizza i valori dei pixel tra 0 e 1
+            labels.append(img)
         except (IOError, UnidentifiedImageError) as e:
             print(f"Errore nel caricamento dell'etichetta {label_filename}: {e}")
     return np.array(labels)
@@ -101,6 +93,13 @@ def load_dataset(image_dir, label_dir):
     print(f"Numero di etichette caricate: {len(labels)}")
     assert len(images) == len(labels), "Il numero di immagini e etichette non corrisponde."
     return tf.data.Dataset.from_tensor_slices((images, labels))
+
+# Imposta i percorsi direttamente nel codice
+PERCORSO_TRAINING_IMMAGINI = '/Users/utente/Downloads/Training-labeled/images'
+PERCORSO_TRAINING_LABELS = '/Users/utente/Downloads/Training-labeled/labels'
+PERCORSO_TUNING_IMMAGINI = '/Users/utente/Downloads/Tuning/images'
+PERCORSO_TUNING_LABELS = '/Users/utente/Downloads/Tuning/labels'
+PERCORSO_OUTPUT = '/Users/utente/Desktop/output-principi'
 
 # Carica i dataset di addestramento e tuning
 train_dataset = load_dataset(PERCORSO_TRAINING_IMMAGINI, PERCORSO_TRAINING_LABELS)
@@ -129,3 +128,23 @@ save_predictions(tuning_dataset.batch(32), model, PERCORSO_OUTPUT)
 
 # Visualizzazione del modello
 model.summary()
+
+# Visualizza alcune predizioni per verifica
+def visualize_predictions(dataset, model):
+    for images, _ in dataset.take(1):
+        predictions = model.predict(images)
+        for i in range(min(5, len(images))):
+            plt.figure(figsize=(10, 5))
+            plt.subplot(1, 3, 1)
+            plt.title("Input Image")
+            plt.imshow(images[i], cmap='gray')
+            plt.subplot(1, 3, 2)
+            plt.title("Predicted Mask")
+            plt.imshow(predictions[i].squeeze(), cmap='gray')
+            plt.subplot(1, 3, 3)
+            plt.title("Ground Truth")
+            plt.imshow(images[i], cmap='gray')
+            plt.show()
+
+# Visualizza alcune predizioni del set di tuning
+visualize_predictions(tuning_dataset.batch(32), model)
